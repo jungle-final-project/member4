@@ -1,0 +1,288 @@
+openapi: 3.0.3
+info:
+  title: BuildGraph AI Prototype API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/health:
+    get:
+      summary: API health
+      responses:
+        "200":
+          description: OK
+  /api/auth/login:
+    post:
+      summary: Email login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: JWT token and user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+  /api/users:
+    post:
+      summary: Sign up user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "201":
+          description: Created user
+  /api/auth/me:
+    get:
+      summary: Current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+  /api/requirements/parse:
+    post:
+      summary: Parse natural language requirements
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequirementParseRequest"
+      responses:
+        "200":
+          description: Parsed requirement
+  /api/builds/recommend:
+    post:
+      summary: Recommend seed builds
+      responses:
+        "200":
+          description: Build recommendations
+  /api/builds/{id}:
+    get:
+      summary: Build detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Build detail
+  /api/builds/history:
+    get:
+      summary: Saved build history
+      responses:
+        "200":
+          description: History
+  /api/builds/{id}/change-part:
+    post:
+      summary: Compare and apply part change
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Change diff
+  /api/parts:
+    get:
+      summary: Part list
+      responses:
+        "200":
+          description: Parts
+  /api/parts/{id}:
+    get:
+      summary: Part detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Part
+  /api/tools/{tool}/check:
+    post:
+      summary: Run validation tool
+      parameters:
+        - in: path
+          name: tool
+          required: true
+          schema:
+            type: string
+            enum: [compatibility, power, size, performance, price]
+      responses:
+        "200":
+          description: Tool result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolResult"
+  /api/price-alerts:
+    get:
+      summary: Price alerts
+      responses:
+        "200":
+          description: Alerts
+    post:
+      summary: Register target price alert
+      responses:
+        "201":
+          description: Created alert
+  /api/agent-logs/upload:
+    post:
+      summary: Upload recent agent log
+      responses:
+        "201":
+          description: Uploaded log metadata
+  /api/agent-logs/{id}:
+    get:
+      summary: Agent log detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Log summary
+  /api/as-tickets:
+    post:
+      summary: Create AS ticket
+      responses:
+        "201":
+          description: Created ticket
+  /api/as-tickets/{id}:
+    get:
+      summary: AS ticket detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ticket
+  /api/admin/dashboard:
+    get:
+      summary: Admin dashboard
+      responses:
+        "200":
+          description: Dashboard
+  /api/admin/agent-sessions/{id}:
+    get:
+      summary: Agent session detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agent session
+  /api/admin/tool-invocations:
+    get:
+      summary: Tool invocation list
+      responses:
+        "200":
+          description: Tool invocations
+  /api/admin/as-tickets:
+    get:
+      summary: Admin AS tickets
+      responses:
+        "200":
+          description: Tickets
+  /api/admin/price-jobs:
+    get:
+      summary: Price job list
+      responses:
+        "200":
+          description: Jobs
+  /api/admin/price-jobs/run:
+    post:
+      summary: Run price collection job
+      responses:
+        "202":
+          description: Job queued
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    SignupRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [USER, ADMIN]
+    RequirementParseRequest:
+      type: object
+      properties:
+        message:
+          type: string
+        budget:
+          type: integer
+    ToolResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [PASS, WARN, FAIL]
+        score:
+          type: number
+        confidence:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        summary:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string

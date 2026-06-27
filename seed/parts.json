@@ -1,0 +1,8 @@
+[
+  {"id":"cpu-7600","category":"CPU","name":"AMD Ryzen 5 7600","price":259000,"status":"ACTIVE"},
+  {"id":"gpu-4070s","category":"GPU","name":"NVIDIA RTX 4070 SUPER","price":890000,"status":"ACTIVE"},
+  {"id":"ram-32-ddr5","category":"RAM","name":"DDR5 32GB 5600","price":128000,"status":"ACTIVE"},
+  {"id":"ssd-1tb","category":"SSD","name":"NVMe 1TB Gen4","price":99000,"status":"ACTIVE"},
+  {"id":"psu-750","category":"PSU","name":"750W 80+ Gold","price":126000,"status":"ACTIVE"},
+  {"id":"case-air","category":"CASE","name":"Airflow Mid Tower","price":82000,"status":"ACTIVE"}
+]

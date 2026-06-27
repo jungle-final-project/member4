@@ -1,0 +1,13 @@
+{
+  "name": "buildgraph-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:web": "npm --prefix apps/web run build",
+    "test:web": "npm --prefix apps/web run test",
+    "api:bootRun": "cd apps/api && ./gradlew bootRun",
+    "agent:sample": "python apps/pc-agent/buildgraph_agent.py sample --out seed/sample-agent-log.jsonl",
+    "compose:config": "docker compose config"
+  }
+}

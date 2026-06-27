@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: buildgraph-api
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/buildgraph}
+    username: ${SPRING_DATASOURCE_USERNAME:buildgraph}
+    password: ${SPRING_DATASOURCE_PASSWORD:buildgraph}
+  sql:
+    init:
+      mode: always
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: 6379
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    username: ${SPRING_RABBITMQ_USERNAME:buildgraph}
+    password: ${SPRING_RABBITMQ_PASSWORD:buildgraph}
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
