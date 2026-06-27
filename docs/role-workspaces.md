@@ -46,6 +46,17 @@
 | 4 | `apps/web/src/features/support`, `apps/web/src/features/support/supportApi.ts` | AS 접수, 티켓 상세, 로그 업로드 정책 |
 | 5 | `apps/web/src/components/layout`, `apps/web/src/components/display`, `apps/web/src/components/feedback`, `apps/web/src/features/admin/pages/AdminDashboardPage.tsx` | 공통 shell, 공통 UI, 관리자 대시보드 |
 
+## 관리자 화면 내부 소유권
+
+`apps/web/src/features/admin`은 여러 담당자가 같이 보는 운영 화면이므로 아래 경계를 우선 적용합니다. 공통 shell과 route 연결은 5번이 관리하고, 도메인별 상세 화면의 내용은 해당 기능 담당자가 관리합니다.
+
+| 담당 | 관리자 화면/파일 | 책임 |
+| --- | --- | --- |
+| 2 | `AdminPartsPage.tsx` | 부품, 가격, 가격 작업 상태 |
+| 3 | `AgentSessionAdminPage.tsx`, `ToolInvocationAdminPage.tsx`, `RagEvidenceAdminPage.tsx` | Agent, RAG, Tool 근거 검토 |
+| 4 | `AdminTicketsPage.tsx`, `AdminTicketDetailPage.tsx` | AS 티켓, 로그 정책, 원인 후보 |
+| 5 | `AdminDashboardPage.tsx`, `AdminShell`, 공통 admin route | 관리자 shell, 대시보드, 인증/권한 진입점 |
+
 ## CI 소유권
 
 저장소에는 최소 GitHub Actions 워크플로인 `.github/workflows/ci.yml`이 포함되어 있습니다.
@@ -53,6 +64,7 @@
 | 검사 | 담당 | 목적 |
 | --- | --- | --- |
 | `apps/web`에서 `npm ci`, `npm run build`, `npm run test` | 5번이 유지보수하고 모든 담당자가 통과 상태를 유지 | 라우트 오류, TypeScript 오류, 프론트엔드 빌드 실패 탐지 |
+| `python tools/validate_openapi.py` | 5번이 유지보수하고 API 담당자가 통과 상태를 유지 | OpenAPI YAML 파싱 및 핵심 POST requestBody 누락 탐지 |
 | Java 21 환경의 `apps/api`에서 `./gradlew bootJar --no-daemon` | 5번이 유지보수하고 백엔드 담당자가 통과 상태를 유지 | 백엔드 컴파일 및 패키징 실패 탐지 |
 | `docker compose config` | 5 | 병합 전 잘못된 compose 변경 탐지 |
 
