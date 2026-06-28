@@ -11,14 +11,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api")
 public class PartController {
+    private final PartQueryService partQueryService;
+
+    public PartController(PartQueryService partQueryService) {
+        this.partQueryService = partQueryService;
+    }
+
     @GetMapping("/parts")
     Map<String, Object> parts() {
-        return Map.of("items", PartSeed.parts());
+        return partQueryService.parts();
     }
 
     @GetMapping("/parts/{id}")
     Map<String, Object> part(@PathVariable String id) {
-        return PartSeed.part(id);
+        return partQueryService.part(id);
     }
 
     @PostMapping("/tools/compatibility/check")
@@ -47,6 +53,6 @@ public class PartController {
     }
 
     private Map<String, Object> tool(String tool, Map<String, Object> request) {
-        return ToolSeed.toolResult(tool);
+        return partQueryService.toolResult(tool);
     }
 }

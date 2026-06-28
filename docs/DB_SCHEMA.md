@@ -395,6 +395,7 @@ Index:
 - index: `(user_id, status)`
 - index: `(part_id, target_price)`
 - index: `price_alerts.deleted_at`
+- partial unique: active 상태에서는 `(user_id, part_id, target_price)` 중복을 허용하지 않는다.
 
 ### price_jobs
 
@@ -420,6 +421,7 @@ Index:
 - unique: `price_jobs.public_id`
 - index: `price_jobs.status`
 - index: `price_jobs.created_at`
+- partial unique: `QUEUED`, `RUNNING` 상태의 active job은 동시에 1개만 허용한다.
 
 ### compatibility_rules
 

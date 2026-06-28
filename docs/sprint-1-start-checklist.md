@@ -9,7 +9,7 @@
 - API 요청/응답을 바꾸면 [API_CONTRACT.md](API_CONTRACT.md)와 [openapi.yaml](openapi.yaml)을 같은 PR에서 수정합니다.
 - DB table/column/enum/status를 바꾸면 [DB_SCHEMA.md](DB_SCHEMA.md)를 같은 PR에서 수정합니다.
 - mock 데이터는 담당 feature의 `mocks` 안에 추가합니다.
-- seed 데이터는 담당 백엔드 domain의 `*Seed.java`에 추가합니다.
+- 팀 공통 seed 데이터는 Flyway migration에 추가합니다. `*Seed.java`는 DB 연결 전 임시 응답이나 단위 테스트용으로만 사용합니다.
 - PR 전에 `npm run test`, `python tools/validate_openapi.py`, `docker compose config`를 실행합니다.
 
 ## 1번: 견적/인증

@@ -1,7 +1,8 @@
 package com.buildgraph.prototype.admin;
 
-import com.buildgraph.prototype.price.PriceSeed;
-import com.buildgraph.prototype.ticket.TicketSeed;
+import com.buildgraph.prototype.agent.AgentQueryService;
+import com.buildgraph.prototype.price.PriceQueryService;
+import com.buildgraph.prototype.ticket.TicketQueryService;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,58 +19,75 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
+    private final AdminQueryService adminQueryService;
+    private final AgentQueryService agentQueryService;
+    private final TicketQueryService ticketQueryService;
+    private final PriceQueryService priceQueryService;
+
+    public AdminController(
+            AdminQueryService adminQueryService,
+            AgentQueryService agentQueryService,
+            TicketQueryService ticketQueryService,
+            PriceQueryService priceQueryService
+    ) {
+        this.adminQueryService = adminQueryService;
+        this.agentQueryService = agentQueryService;
+        this.ticketQueryService = ticketQueryService;
+        this.priceQueryService = priceQueryService;
+    }
+
     @GetMapping("/dashboard")
     Map<String, Object> dashboard(@RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return AdminSeed.dashboard();
+        return adminQueryService.dashboard();
     }
 
     @GetMapping("/audit-logs/recent")
     Map<String, Object> auditLogs(@RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return AdminSeed.auditLogs();
+        return adminQueryService.auditLogs();
     }
 
     @GetMapping("/agent-sessions")
     Map<String, Object> agentSessions(@RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return AdminSeed.agentSessions();
+        return agentQueryService.agentSessions();
     }
 
     @GetMapping("/agent-sessions/{id}")
     Map<String, Object> agentSession(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return AdminSeed.agentSession(id);
+        return agentQueryService.adminSession(id);
     }
 
     @GetMapping("/tool-invocations")
     Map<String, Object> toolInvocations(@RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return AdminSeed.toolInvocations();
+        return agentQueryService.toolInvocations();
     }
 
     @GetMapping("/tool-invocations/{id}")
     Map<String, Object> toolInvocation(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return AdminSeed.toolInvocation(id);
+        return agentQueryService.toolInvocation(id);
     }
 
     @GetMapping("/rag-evidence/{id}")
     Map<String, Object> ragEvidence(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return AdminSeed.ragEvidence(id);
+        return agentQueryService.ragEvidence(id);
     }
 
     @GetMapping("/as-tickets")
     Map<String, Object> tickets(@RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return Map.of("items", TicketSeed.tickets());
+        return Map.of("items", ticketQueryService.tickets());
     }
 
     @GetMapping("/as-tickets/{id}")
     Map<String, Object> ticket(@PathVariable String id, @RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return TicketSeed.adminTicket(id);
+        return ticketQueryService.ticket(id);
     }
 
     @PatchMapping("/as-tickets/{id}")
@@ -79,20 +97,20 @@ public class AdminController {
             @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
         requireAdmin(authorization);
-        return TicketSeed.adminTicket(id);
+        return ticketQueryService.update(id, request);
     }
 
     @GetMapping("/price-jobs")
     Map<String, Object> priceJobs(@RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return PriceSeed.priceJobs();
+        return priceQueryService.priceJobs();
     }
 
     @PostMapping("/price-jobs/run")
     @ResponseStatus(HttpStatus.CREATED)
     Map<String, Object> runPriceJob(@RequestHeader(value = "Authorization", required = false) String authorization) {
         requireAdmin(authorization);
-        return PriceSeed.runPriceJob();
+        return priceQueryService.runPriceJob();
     }
 
     private static void requireAdmin(String authorization) {

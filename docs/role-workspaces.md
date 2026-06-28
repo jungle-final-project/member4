@@ -52,7 +52,8 @@
 
 | 데이터 | 위치 | 규칙 |
 | --- | --- | --- |
-| 백엔드 seed | 담당 domain의 `*Seed.java` | domain 데이터는 `common/MockData.java`에 넣지 않습니다. |
+| 팀 공통 DB seed | `apps/api/src/main/resources/db/migration/V7__admin_audit_seed.sql` | 화면/API 연결 기준 데이터는 Flyway로 관리합니다. |
+| 백엔드 임시 seed | 담당 domain의 `*Seed.java` | DB 연결 전 임시 응답이나 단위 테스트용으로만 사용합니다. domain 데이터는 `common/MockData.java`에 넣지 않습니다. |
 | 프론트 mock | 담당 feature의 `mocks` 디렉터리 | `src/data/prototypeData.ts`는 호환용 barrel로만 유지합니다. |
 | 공통 유틸 | `common/MockData.java` | `map()`, `now()` 같은 작은 helper만 유지합니다. |
 

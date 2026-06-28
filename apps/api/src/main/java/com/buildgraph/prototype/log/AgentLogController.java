@@ -14,6 +14,12 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api")
 public class AgentLogController {
+    private final AgentLogQueryService agentLogQueryService;
+
+    public AgentLogController(AgentLogQueryService agentLogQueryService) {
+        this.agentLogQueryService = agentLogQueryService;
+    }
+
     @PostMapping("/agent-logs/upload")
     @ResponseStatus(HttpStatus.CREATED)
     Map<String, Object> upload(
@@ -21,11 +27,11 @@ public class AgentLogController {
             @RequestParam(required = false) Integer rangeMinutes,
             @RequestParam(required = false) Boolean consentAccepted
     ) {
-        return LogSeed.upload();
+        return agentLogQueryService.upload(file, rangeMinutes, consentAccepted);
     }
 
     @GetMapping("/agent-logs/{id}")
     Map<String, Object> log(@PathVariable String id) {
-        return LogSeed.detail(id);
+        return agentLogQueryService.detail(id);
     }
 }
