@@ -2,6 +2,7 @@ package com.buildgraph.prototype.agent;
 
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.rag.RagQueryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
@@ -14,9 +15,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class AgentQueryService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private final JdbcTemplate jdbcTemplate;
+    private final RagQueryService ragQueryService;
 
-    public AgentQueryService(JdbcTemplate jdbcTemplate) {
+    public AgentQueryService(JdbcTemplate jdbcTemplate, RagQueryService ragQueryService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.ragQueryService = ragQueryService;
     }
 
     public Map<String, Object> createSession(Map<String, Object> request) {
@@ -87,7 +90,7 @@ public class AgentQueryService {
                 "stateTimeline", DbValueMapper.json(row, "state_timeline", List.of()),
                 "summary", DbValueMapper.string(row, "summary"),
                 "toolInvocations", toolInvocationsBySession(id),
-                "ragEvidence", ragEvidenceBySession(id)
+                "ragEvidence", ragQueryService.evidenceBySession(id)
         );
     }
 
@@ -99,7 +102,7 @@ public class AgentQueryService {
                 "summary", DbValueMapper.string(row, "summary"),
                 "stateTimeline", DbValueMapper.json(row, "state_timeline", List.of()),
                 "toolInvocations", toolInvocationsBySession(id),
-                "evidenceIds", ragEvidenceBySession(id).stream().map(evidence -> evidence.get("id")).toList()
+                "evidenceIds", ragQueryService.evidenceBySession(id).stream().map(evidence -> evidence.get("id")).toList()
         );
     }
 
@@ -140,44 +143,6 @@ public class AgentQueryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tool invocation을 찾을 수 없습니다."));
     }
 
-    public Map<String, Object> ragEvidence(String id) {
-        return jdbcTemplate.queryForList("""
-                        SELECT re.public_id::text AS id,
-                               s.public_id::text AS agent_session_id,
-                               re.source_id,
-                               re.chunk_text,
-                               re.summary,
-                               re.score,
-                               re.metadata
-                        FROM rag_evidence re
-                        LEFT JOIN agent_sessions s ON s.id = re.agent_session_id
-                        WHERE re.public_id = ?::uuid
-                        """, id)
-                .stream()
-                .findFirst()
-                .map(this::ragEvidenceMap)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RAG 근거를 찾을 수 없습니다."));
-    }
-
-    public Map<String, Object> ragSearch() {
-        List<Map<String, Object>> items = jdbcTemplate.queryForList("""
-                        SELECT re.public_id::text AS id,
-                               s.public_id::text AS agent_session_id,
-                               re.source_id,
-                               re.chunk_text,
-                               re.summary,
-                               re.score,
-                               re.metadata
-                        FROM rag_evidence re
-                        LEFT JOIN agent_sessions s ON s.id = re.agent_session_id
-                        ORDER BY re.score DESC NULLS LAST, re.id
-                        """)
-                .stream()
-                .map(this::ragEvidenceMap)
-                .toList();
-        return MockData.map("items", items, "page", 0, "size", 20, "total", items.size());
-    }
-
     private Map<String, Object> agentSessionRow(String id) {
         return jdbcTemplate.queryForList("""
                         SELECT public_id::text AS id, status, summary, state_timeline, created_at, updated_at
@@ -193,25 +158,6 @@ public class AgentQueryService {
         return jdbcTemplate.queryForList(toolInvocationSql() + " WHERE s.public_id = ?::uuid ORDER BY ti.id", sessionId)
                 .stream()
                 .map(this::toolInvocationMap)
-                .toList();
-    }
-
-    private List<Map<String, Object>> ragEvidenceBySession(String sessionId) {
-        return jdbcTemplate.queryForList("""
-                        SELECT re.public_id::text AS id,
-                               s.public_id::text AS agent_session_id,
-                               re.source_id,
-                               re.chunk_text,
-                               re.summary,
-                               re.score,
-                               re.metadata
-                        FROM rag_evidence re
-                        JOIN agent_sessions s ON s.id = re.agent_session_id
-                        WHERE s.public_id = ?::uuid
-                        ORDER BY re.id
-                        """, sessionId)
-                .stream()
-                .map(this::ragEvidenceMap)
                 .toList();
     }
 
@@ -244,18 +190,6 @@ public class AgentQueryService {
                 "requestPayload", DbValueMapper.json(row, "request_payload", Map.of()),
                 "resultPayload", DbValueMapper.json(row, "result_payload", Map.of()),
                 "createdAt", DbValueMapper.timestamp(row, "created_at")
-        );
-    }
-
-    private Map<String, Object> ragEvidenceMap(Map<String, Object> row) {
-        return MockData.map(
-                "id", DbValueMapper.string(row, "id"),
-                "agentSessionId", DbValueMapper.string(row, "agent_session_id"),
-                "sourceId", DbValueMapper.string(row, "source_id"),
-                "chunkText", DbValueMapper.string(row, "chunk_text"),
-                "summary", DbValueMapper.string(row, "summary"),
-                "score", row.get("score"),
-                "metadata", DbValueMapper.json(row, "metadata", Map.of())
         );
     }
 
