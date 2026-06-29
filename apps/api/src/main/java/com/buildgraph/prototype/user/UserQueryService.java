@@ -3,6 +3,7 @@ package com.buildgraph.prototype.user;
 import com.buildgraph.prototype.common.ApiException;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -16,17 +17,20 @@ public class UserQueryService {
     private final PasswordService passwordService;
     private final JwtTokenService jwtTokenService;
     private final CurrentUserService currentUserService;
+    private final RefreshTokenService refreshTokenService;
 
     public UserQueryService(
             JdbcTemplate jdbcTemplate,
             PasswordService passwordService,
             JwtTokenService jwtTokenService,
-            CurrentUserService currentUserService
+            CurrentUserService currentUserService,
+            RefreshTokenService refreshTokenService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordService = passwordService;
         this.jwtTokenService = jwtTokenService;
         this.currentUserService = currentUserService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     public Map<String, Object> login(String email, String password) {
@@ -35,11 +39,12 @@ public class UserQueryService {
         if (!passwordService.matches(password, passwordHash)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
-        String role = DbValueMapper.string(user, "role");
         Map<String, Object> userDto = userMap(user);
+        RefreshTokenService.IssuedRefreshToken refreshToken = refreshTokenService.issue();
+        storeRefreshToken(user, refreshToken);
         return MockData.map(
                 "accessToken", jwtTokenService.issueAccessToken(userDto),
-                "refreshToken", "demo-refresh-" + role.toLowerCase(),
+                "refreshToken", refreshToken.token(),
                 "user", userDto
         );
     }
@@ -78,9 +83,20 @@ public class UserQueryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "등록된 사용자를 찾을 수 없습니다."));
     }
 
+    private void storeRefreshToken(Map<String, Object> user, RefreshTokenService.IssuedRefreshToken refreshToken) {
+        jdbcTemplate.update("""
+                INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+                """,
+                longValue(user, "internal_id"),
+                refreshToken.tokenHash(),
+                Timestamp.from(refreshToken.expiresAt())
+        );
+    }
+
     private List<Map<String, Object>> findRowsByEmail(String email) {
         return jdbcTemplate.queryForList("""
-                SELECT public_id::text AS id, email, password_hash, name, role, created_at
+                SELECT id AS internal_id, public_id::text AS id, email, password_hash, name, role, created_at
                 FROM users
                 WHERE email = ?
                   AND deleted_at IS NULL
@@ -95,5 +111,13 @@ public class UserQueryService {
                 "role", DbValueMapper.string(row, "role"),
                 "createdAt", DbValueMapper.timestamp(row, "created_at")
         );
+    }
+
+    private Long longValue(Map<String, Object> row, String key) {
+        Object value = row.get(key);
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return value == null ? null : Long.valueOf(value.toString());
     }
 }
