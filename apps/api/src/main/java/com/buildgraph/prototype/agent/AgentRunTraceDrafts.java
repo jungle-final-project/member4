@@ -3,6 +3,7 @@ package com.buildgraph.prototype.agent;
 import com.buildgraph.prototype.common.MockData;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 final class AgentRunTraceDrafts {
     private AgentRunTraceDrafts() {
@@ -48,6 +49,17 @@ final class AgentRunTraceDrafts {
     static List<AgentToolInvocationDraft> toolInvocations(AgentSessionRoot root, AgentRunProfile profile) {
         return profile.toolNames().stream()
                 .map(toolName -> toolInvocation(toolName, root, profile))
+                .toList();
+    }
+
+    /** Converts real ToolCheckService results into Agent trace drafts. */
+    static List<AgentToolInvocationDraft> toolInvocationsFromResults(
+            AgentSessionRoot root,
+            AgentRunProfile profile,
+            List<Map<String, Object>> results
+    ) {
+        return results.stream()
+                .map(result -> toolInvocationFromResult(root, profile, result))
                 .toList();
     }
 
@@ -122,6 +134,33 @@ final class AgentRunTraceDrafts {
         );
     }
 
+    /** Builds one Agent Tool draft from a real Tool result map. */
+    private static AgentToolInvocationDraft toolInvocationFromResult(
+            AgentSessionRoot root,
+            AgentRunProfile profile,
+            Map<String, Object> result
+    ) {
+        String toolName = stringValue(result.get("tool"), "unknown");
+        ToolStatus status = enumValue(ToolStatus.class, result.get("status"), ToolStatus.WARN);
+        ConfidenceLevel confidence = enumValue(ConfidenceLevel.class, result.get("confidence"), ConfidenceLevel.MEDIUM);
+        String summary = stringValue(result.get("summary"), "Tool check completed.");
+        return new AgentToolInvocationDraft(
+                toolName,
+                status,
+                confidence,
+                summary,
+                MockData.map(
+                        "toolName", toolName,
+                        "rootType", root.type().name(),
+                        "rootId", root.publicId(),
+                        "purpose", profile.purpose().name(),
+                        "context", MockData.map("summaryTarget", profile.summaryTarget())
+                ),
+                result,
+                latencyMs(toolName)
+        );
+    }
+
     private static ToolStatus toolStatus(String toolName, AgentPurpose purpose) {
         if (purpose == AgentPurpose.AS_ANALYZE && "performance".equals(toolName)) {
             return ToolStatus.WARN;
@@ -152,5 +191,23 @@ final class AgentRunTraceDrafts {
         List<String> order = List.of("compatibility", "power", "size", "performance", "price");
         int index = order.indexOf(toolName);
         return index < 0 ? 60 : 40 + (index * 11);
+    }
+
+    /** Reads a string fallback from arbitrary Tool result values. */
+    private static String stringValue(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isBlank() ? fallback : text;
+    }
+
+    /** Reads enum values defensively from arbitrary Tool result values. */
+    private static <T extends Enum<T>> T enumValue(Class<T> enumType, Object value, T fallback) {
+        try {
+            return Enum.valueOf(enumType, stringValue(value, fallback.name()));
+        } catch (RuntimeException ignored) {
+            return fallback;
+        }
     }
 }

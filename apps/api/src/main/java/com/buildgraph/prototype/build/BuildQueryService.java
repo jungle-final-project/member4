@@ -12,6 +12,8 @@ import com.buildgraph.prototype.agent.AgentTraceService;
 import com.buildgraph.prototype.agent.OpenAiResponsesClient;
 import com.buildgraph.prototype.common.DbValueMapper;
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.part.ToolBuildPart;
+import com.buildgraph.prototype.part.ToolCheckService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -66,19 +68,22 @@ public class BuildQueryService {
     private final AgentRunner agentRunner;
     private final AgentRagRetrievalService agentRagRetrievalService;
     private final OpenAiResponsesClient openAiResponsesClient;
+    private final ToolCheckService toolCheckService;
 
     public BuildQueryService(
             JdbcTemplate jdbcTemplate,
             AgentTraceService agentTraceService,
             AgentRunner agentRunner,
             AgentRagRetrievalService agentRagRetrievalService,
-            OpenAiResponsesClient openAiResponsesClient
+            OpenAiResponsesClient openAiResponsesClient,
+            ToolCheckService toolCheckService
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.agentTraceService = agentTraceService;
         this.agentRunner = agentRunner;
         this.agentRagRetrievalService = agentRagRetrievalService;
         this.openAiResponsesClient = openAiResponsesClient;
+        this.toolCheckService = toolCheckService;
     }
 
     public Map<String, Object> parse(Map<String, Object> request) {
@@ -313,69 +318,7 @@ public class BuildQueryService {
     }
 
     private List<Map<String, Object>> evaluateTools(List<PartCandidate> parts, int budget) {
-        Map<String, PartCandidate> byCategory = byCategory(parts);
-        PartCandidate cpu = byCategory.get("CPU");
-        PartCandidate motherboard = byCategory.get("MOTHERBOARD");
-        PartCandidate ram = byCategory.get("RAM");
-        PartCandidate gpu = byCategory.get("GPU");
-        PartCandidate psu = byCategory.get("PSU");
-        PartCandidate pcCase = byCategory.get("CASE");
-        PartCandidate cooler = byCategory.get("COOLER");
-        int total = total(parts);
-
-        boolean socketMatched = same(stringAttr(cpu, "socket"), stringAttr(motherboard, "socket"));
-        boolean memoryMatched = same(firstText(stringAttr(ram, "memoryType"), "DDR5"), firstText(stringAttr(motherboard, "memoryType"), "DDR5"));
-        boolean coolerMatched = socketSupported(cooler, stringAttr(cpu, "socket"));
-
-        int estimatedWattage = estimatedWattage(parts);
-        int psuCapacity = intAttr(psu, "capacityW", 0);
-        int vendorRecommendedPsu = intAttr(gpu, "requiredSystemPowerW", 0);
-        int requiredRatedCapacity = Math.max(vendorRecommendedPsu, estimatedWattage + 120);
-        int headroom = psuCapacity - estimatedWattage;
-        int loadPercent = psuCapacity <= 0 ? 100 : (int) Math.round((estimatedWattage * 100.0) / psuCapacity);
-        boolean ratedCapacityPass = psuCapacity >= requiredRatedCapacity && loadPercent <= 85;
-        boolean ratedCapacityWarn = psuCapacity >= estimatedWattage && headroom >= 80;
-
-        int gpuLength = intAttr(gpu, "lengthMm", 0);
-        int maxGpuLength = intAttr(pcCase, "maxGpuLengthMm", 0);
-        int coolerHeight = intAttr(cooler, "heightMm", intAttr(cooler, "coolerHeightMm", 0));
-        int maxCoolerHeight = intAttr(pcCase, "maxCpuCoolerHeightMm", 190);
-
-        return List.of(
-                tool("compatibility",
-                        socketMatched && memoryMatched && coolerMatched ? "PASS" : "FAIL",
-                        socketMatched && memoryMatched ? "HIGH" : "MEDIUM",
-                        socketMatched && memoryMatched && coolerMatched ? "CPU, 메인보드, RAM, 쿨러 기본 호환성이 맞습니다." : "소켓 또는 메모리 호환성 확인이 필요합니다.",
-                        MockData.map("socketMatched", socketMatched, "memoryTypeMatched", memoryMatched, "coolerSocketMatched", coolerMatched)),
-                tool("power",
-                        ratedCapacityPass ? "PASS" : ratedCapacityWarn ? "WARN" : "FAIL",
-                        headroom >= 180 && loadPercent <= 80 ? "HIGH" : "MEDIUM",
-                        ratedCapacityPass ? "PSU 정격 출력이 예상 지속 부하와 GPU 권장 정격 파워를 충족합니다." : "PSU 정격 출력 여유가 낮아 상위 용량을 검토해야 합니다.",
-                        MockData.map(
-                                "estimatedContinuousLoadW", estimatedWattage,
-                                "psuRatedCapacityW", psuCapacity,
-                                "vendorRecommendedPsuW", vendorRecommendedPsu,
-                                "requiredRatedCapacityW", requiredRatedCapacity,
-                                "ratedHeadroomW", headroom,
-                                "ratedLoadPercent", loadPercent,
-                                "note", "capacityW는 정격 출력이며 PSU 자체 소비전력이나 피크 부하로 합산하지 않습니다."
-                        )),
-                tool("size",
-                        gpuLength <= maxGpuLength && coolerHeight <= maxCoolerHeight ? "PASS" : "WARN",
-                        "MEDIUM",
-                        gpuLength <= maxGpuLength && coolerHeight <= maxCoolerHeight ? "GPU 길이와 쿨러 높이가 케이스 제약 안에 있습니다." : "케이스 장착 제약을 추가 확인해야 합니다.",
-                        MockData.map("gpuLengthMm", gpuLength, "maxGpuLengthMm", maxGpuLength, "coolerHeightMm", coolerHeight, "maxCpuCoolerHeightMm", maxCoolerHeight)),
-                tool("performance",
-                        intAttr(gpu, "vramGb", 0) >= 12 ? "PASS" : "WARN",
-                        "MEDIUM",
-                        intAttr(gpu, "vramGb", 0) >= 12 ? "QHD 게임과 개발 병행에 적합한 GPU 등급입니다." : "VRAM 여유가 작아 고해상도 작업에서 한계가 있을 수 있습니다.",
-                        MockData.map("gpu", gpu.name(), "vramGb", intAttr(gpu, "vramGb", 0), "cpu", cpu.name())),
-                tool("price",
-                        total <= budget ? "PASS" : total <= Math.round(budget * 1.08) ? "WARN" : "FAIL",
-                        "HIGH",
-                        total <= budget ? "저장된 현재가 기준 예산 안에 들어옵니다." : "저장된 현재가 기준 예산을 초과합니다.",
-                        MockData.map("budget", budget, "totalPrice", total, "priceDiff", total - budget))
-        );
+        return toolCheckService.checkBuild(parts.stream().map(this::toolPart).toList(), budget);
     }
 
     private Map<String, Object> buildSummary(Map<String, Object> row) {
@@ -487,6 +430,18 @@ public class BuildQueryService {
                 DbValueMapper.string(row, "manufacturer"),
                 DbValueMapper.integer(row, "price"),
                 objectMap(DbValueMapper.json(row, "attributes", Map.of()))
+        );
+    }
+
+    private ToolBuildPart toolPart(PartCandidate part) {
+        return new ToolBuildPart(
+                part.internalId(),
+                part.publicId(),
+                part.category(),
+                part.name(),
+                part.manufacturer(),
+                part.price(),
+                part.attributes()
         );
     }
 
@@ -946,10 +901,6 @@ public class BuildQueryService {
                 .map(PartCandidate::publicId)
                 .findFirst()
                 .orElse(null);
-    }
-
-    private static Map<String, Object> tool(String tool, String status, String confidence, String summary, Map<String, Object> details) {
-        return MockData.map("tool", tool, "status", status, "confidence", confidence, "summary", summary, "details", details);
     }
 
     private static int effectiveBudget(RequirementRow requirement, Map<String, Object> answers) {

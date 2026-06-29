@@ -1,6 +1,7 @@
 package com.buildgraph.prototype.agent;
 
 import com.buildgraph.prototype.common.MockData;
+import com.buildgraph.prototype.part.ToolCheckService;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.server.ResponseStatusException;
@@ -16,15 +17,18 @@ public class LlmAgentRunner implements AgentRunner {
     private final AgentTraceService agentTraceService;
     private final AgentRagRetrievalService agentRagRetrievalService;
     private final OpenAiResponsesClient openAiResponsesClient;
+    private final ToolCheckService toolCheckService;
 
     public LlmAgentRunner(
             AgentTraceService agentTraceService,
             AgentRagRetrievalService agentRagRetrievalService,
-            OpenAiResponsesClient openAiResponsesClient
+            OpenAiResponsesClient openAiResponsesClient,
+            ToolCheckService toolCheckService
     ) {
         this.agentTraceService = agentTraceService;
         this.agentRagRetrievalService = agentRagRetrievalService;
         this.openAiResponsesClient = openAiResponsesClient;
+        this.toolCheckService = toolCheckService;
     }
 
     @Override
@@ -35,7 +39,7 @@ public class LlmAgentRunner implements AgentRunner {
                 .toList();
         agentTraceService.advanceStatus(sessionId, AgentStatus.RAG_SEARCHED, "SYSTEM", "RAG evidence set retrieved for " + profile.purpose());
 
-        List<AgentToolInvocationDraft> toolDrafts = AgentRunTraceDrafts.toolInvocations(root, profile);
+        List<AgentToolInvocationDraft> toolDrafts = toolInvocations(root, profile);
         List<String> toolInvocationIds = toolDrafts.stream()
                 .map(draft -> agentTraceService.recordToolInvocation(sessionId, draft))
                 .toList();
@@ -116,5 +120,18 @@ public class LlmAgentRunner implements AgentRunner {
         }
         String message = error.getMessage();
         return message == null || message.isBlank() ? error.getClass().getSimpleName() : message;
+    }
+
+    /** Calls the real Tool service and falls back to seed drafts if validation cannot resolve parts. */
+    private List<AgentToolInvocationDraft> toolInvocations(AgentSessionRoot root, AgentRunProfile profile) {
+        try {
+            return AgentRunTraceDrafts.toolInvocationsFromResults(
+                    root,
+                    profile,
+                    toolCheckService.checkAgentTools(root.type().name(), root.publicId(), profile.toolNames())
+            );
+        } catch (RuntimeException ignored) {
+            return AgentRunTraceDrafts.toolInvocations(root, profile);
+        }
     }
 }
