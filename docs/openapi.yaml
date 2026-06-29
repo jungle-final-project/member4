@@ -293,6 +293,77 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PartPriceHistoryResponse"
+  /api/quote-drafts/current:
+    get:
+      summary: 현재 로그인 사용자의 수동 견적초안
+      responses:
+        "200":
+          description: 현재 견적초안. active draft가 없으면 status=EMPTY로 반환한다.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteDraftDto"
+  /api/quote-drafts/current/items/{partId}:
+    put:
+      summary: 견적초안에 부품 담기 또는 같은 카테고리 교체
+      parameters:
+        - in: path
+          name: partId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteDraftItemUpsertRequest"
+      responses:
+        "200":
+          description: 갱신된 견적초안
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteDraftDto"
+    patch:
+      summary: 견적초안 부품 수량 변경
+      parameters:
+        - in: path
+          name: partId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteDraftItemUpsertRequest"
+      responses:
+        "200":
+          description: 갱신된 견적초안
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteDraftDto"
+    delete:
+      summary: 견적초안에서 부품 제거
+      parameters:
+        - in: path
+          name: partId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 갱신된 견적초안
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteDraftDto"
   /api/price-alerts:
     get:
       summary: 목표가 알림 목록
@@ -888,6 +959,14 @@ components:
           type: array
           items:
             type: string
+        resolution:
+          type: string
+        preferredVendors:
+          type: array
+          items:
+            type: string
+        priority:
+          type: string
     RequirementDto:
       type: object
       required: [id, rawMessage]
@@ -906,6 +985,36 @@ components:
         parsedContext:
           type: object
           additionalProperties: true
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequirementQuestionDto"
+        agentSessionId:
+          type: string
+          format: uuid
+          nullable: true
+        agentSummary:
+          type: string
+          nullable: true
+        evidenceIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    RequirementQuestionDto:
+      type: object
+      required: [key, label, options, required]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
     BuildRecommendRequest:
       type: object
       required: [requirementId]
@@ -913,6 +1022,10 @@ components:
         requirementId:
           type: string
           format: uuid
+        answers:
+          type: object
+          additionalProperties:
+            type: string
     BuildRecommendResponse:
       type: object
       required: [agentSessionId, recommendations, warnings, evidenceIds]
@@ -933,6 +1046,10 @@ components:
           items:
             type: string
             format: uuid
+        toolResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolResultDto"
     BuildDto:
       type: object
       required: [id, name, totalPrice, confidence, items, warnings, evidenceIds, changeableCategories]
@@ -941,6 +1058,10 @@ components:
           type: string
           format: uuid
         name:
+          type: string
+        recommendedFor:
+          type: string
+        summary:
           type: string
         totalPrice:
           type: integer
@@ -963,6 +1084,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PartCategory"
+        agentSessionId:
+          type: string
+          format: uuid
+          nullable: true
+        agentSummary:
+          type: string
+          nullable: true
+        toolResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolResultDto"
         createdAt:
           type: string
           format: date-time
@@ -977,8 +1109,14 @@ components:
           format: uuid
         name:
           type: string
+        manufacturer:
+          type: string
+          nullable: true
         price:
           type: integer
+        attributes:
+          type: object
+          additionalProperties: true
     ChangePartRequest:
       type: object
       required: [category, partId]
@@ -990,7 +1128,7 @@ components:
           format: uuid
     ChangePartResponse:
       type: object
-      required: [buildId, category, selectedPartId, totalPrice, diff, warnings]
+      required: [buildId, category, selectedPartId, totalPrice, diff, beforeBuild, afterBuild, diffRows, toolResults, warnings]
       properties:
         buildId:
           type: string
@@ -1008,10 +1146,72 @@ components:
         diff:
           type: object
           additionalProperties: true
+        beforeBuild:
+          $ref: "#/components/schemas/BuildDto"
+        afterBuild:
+          type: object
+          required: [id, name, totalPrice, items]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            totalPrice:
+              type: integer
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BuildItemDto"
+        diffRows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChangePartDiffRowDto"
+        toolResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolResultDto"
+        agentSessionId:
+          type: string
+          format: uuid
+          nullable: true
+        agentSummary:
+          type: string
+          nullable: true
         warnings:
           type: array
           items:
             $ref: "#/components/schemas/WarningDto"
+    ChangePartDiffRowDto:
+      type: object
+      required: [label, before, after, diff, status]
+      properties:
+        label:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+        diff:
+          type: string
+        status:
+          type: string
+    ToolResultDto:
+      type: object
+      required: [tool, status, confidence, summary]
+      properties:
+        tool:
+          type: string
+        status:
+          type: string
+          enum: [PASS, WARN, FAIL]
+        confidence:
+          $ref: "#/components/schemas/Confidence"
+        summary:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
     WarningDto:
       type: object
       required: [code, message, severity]
@@ -1083,6 +1283,85 @@ components:
         source:
           type: string
         refreshedAt:
+          type: string
+          format: date-time
+          nullable: true
+    QuoteDraftItemUpsertRequest:
+      type: object
+      description: CPU/GPU/MOTHERBOARD/PSU/CASE/COOLER are single-item categories. RAM and STORAGE can hold multiple distinct parts.
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 9
+          default: 1
+          description: Single-item categories accept only 1. RAM and STORAGE accept 1 to 9.
+    QuoteDraftDto:
+      type: object
+      required: [status, name, items, totalPrice, itemCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [EMPTY, ACTIVE, ORDERED, ARCHIVED]
+        name:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteDraftItemDto"
+        totalPrice:
+          type: integer
+        itemCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+    QuoteDraftItemDto:
+      type: object
+      required: [id, partId, category, name, quantity, unitPriceAtAdd, currentPrice, lineTotal]
+      properties:
+        id:
+          type: string
+          format: uuid
+        partId:
+          type: string
+          format: uuid
+        category:
+          $ref: "#/components/schemas/PartCategory"
+        name:
+          type: string
+        manufacturer:
+          type: string
+          nullable: true
+        quantity:
+          type: integer
+        unitPriceAtAdd:
+          type: integer
+        currentPrice:
+          type: integer
+        lineTotal:
+          type: integer
+        attributes:
+          type: object
+          additionalProperties: true
+        externalOffer:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PartExternalOfferDto"
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
           type: string
           format: date-time
           nullable: true

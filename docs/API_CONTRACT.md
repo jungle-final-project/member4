@@ -156,11 +156,13 @@ Google OAuth 정책:
 
 | Method | Path | Auth | Owner | Request 예시 | Response 예시 | 관련 DB table |
 |---|---|---|---|---|---|---|
-| `POST` | `/api/requirements/parse` | USER | 1번 | `{ "message": "150만원 게임용 PC", "budget": 1500000, "usageTags": ["GAMING"] }` | `{ "id": "2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11", "rawMessage": "150만원 게임용 PC", "budget": 1500000, "usageTags": ["GAMING"], "parsedContext": { "usageTags": ["GAMING"], "budget": 1500000 } }` | `requirements` |
-| `POST` | `/api/builds/recommend` | USER | 1번 | `{ "requirementId": "2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11" }` | `{ "agentSessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a", "recommendations": [{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "QHD Gaming Build", "totalPrice": 1450000, "confidence": "HIGH", "items": [], "warnings": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "changeableCategories": ["GPU", "RAM"] }], "warnings": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"] }` | `requirements`, `builds`, `build_items`, `agent_sessions`, `tool_invocations`, `rag_evidence` |
-| `GET` | `/api/builds/{id}` | USER | 1번 | - | `{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "QHD Gaming Build", "totalPrice": 1450000, "confidence": "HIGH", "items": [{ "category": "GPU", "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "name": "RTX 4070", "price": 850000 }], "warnings": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "changeableCategories": ["GPU", "RAM"], "createdAt": "2026-06-29T10:20:00Z" }` | `builds`, `build_items`, `parts` |
+| `POST` | `/api/requirements/parse` | USER | 1번 | `{ "message": "150만원 게임용 PC", "budget": 1500000, "usageTags": ["GAMING"], "resolution": "QHD", "preferredVendors": ["NVIDIA"], "priority": "성능" }` | `{ "id": "2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11", "rawMessage": "150만원 게임용 PC", "budget": 1500000, "usageTags": ["GAMING"], "parsedContext": { "usageTags": ["GAMING"], "budget": 1500000, "resolution": "QHD", "parseMode": "AGENT_RAG_LLM", "parser": "requirement-parse-agent-v1" }, "questions": [{ "key": "noisePreference", "label": "소음 민감도", "options": ["상관없음", "조용한 편"], "required": false }], "agentSessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a", "agentSummary": "요구사항을 구조화했습니다.", "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"] }` | `requirements`, `agent_sessions`, `rag_evidence` |
+| `POST` | `/api/builds/recommend` | USER | 1번 | `{ "requirementId": "2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11", "answers": { "noisePreference": "조용한 편" } }` | `{ "agentSessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a", "recommendations": [{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "균형형 추천 Build", "recommendedFor": "균형 우선", "summary": "내부 자산과 저장된 현재가를 조합했습니다.", "totalPrice": 1450000, "confidence": "HIGH", "items": [], "warnings": [], "toolResults": [{ "tool": "compatibility", "status": "PASS", "confidence": "HIGH", "summary": "CPU, 메인보드, RAM 호환성이 맞습니다." }], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "agentSessionId": "7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a", "agentSummary": "추천 근거 요약", "changeableCategories": ["GPU", "RAM"] }], "warnings": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "toolResults": [] }` | `requirements`, `builds`, `build_items`, `agent_sessions`, `tool_invocations`, `rag_evidence` |
+| `GET` | `/api/builds/{id}` | USER | 1번 | - | `{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "QHD Gaming Build", "summary": "내부 자산 기반 추천", "totalPrice": 1450000, "confidence": "HIGH", "items": [{ "category": "GPU", "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "name": "RTX 5070", "manufacturer": "NVIDIA", "price": 850000, "attributes": {} }], "warnings": [], "toolResults": [], "evidenceIds": ["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"], "agentSummary": "추천 근거 요약", "changeableCategories": ["GPU", "RAM"], "createdAt": "2026-06-29T10:20:00Z" }` | `builds`, `build_items`, `parts` |
 | `GET` | `/api/builds/history` | USER | 1번 | `?page=0&size=20` | `{ "items": [{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "QHD Gaming Build", "totalPrice": 1450000, "confidence": "HIGH", "createdAt": "2026-06-29T10:20:00Z" }], "page": 0, "size": 20, "total": 1 }` | `requirements`, `builds` |
-| `POST` | `/api/builds/{id}/change-part` | USER | 1번 | `{ "category": "GPU", "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11" }` | `{ "buildId": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "category": "GPU", "previousPartId": "0bb1f994-5e1f-4dc4-b55c-c615130e1bb4", "selectedPartId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "totalPrice": 1500000, "diff": { "price": 50000 }, "warnings": [] }` | `builds`, `build_items`, `parts` |
+| `POST` | `/api/builds/{id}/change-part` | USER | 1번 | `{ "category": "GPU", "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11" }` | `{ "buildId": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "category": "GPU", "previousPartId": "0bb1f994-5e1f-4dc4-b55c-c615130e1bb4", "selectedPartId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "totalPrice": 1500000, "diff": { "price": 50000 }, "beforeBuild": {}, "afterBuild": { "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "name": "QHD Gaming Build", "totalPrice": 1500000, "items": [] }, "diffRows": [{ "label": "GPU", "before": "RTX 5060", "after": "RTX 5070", "diff": "+50,000원", "status": "PASS" }], "toolResults": [], "agentSummary": "변경 비교 요약", "warnings": [] }` | `builds`, `build_items`, `parts` |
+
+`RequirementDto.parsedContext`는 추천 품질을 위해 내부 해석 필드를 포함할 수 있다. `performanceTier`는 `ENTHUSIAST | PERFORMANCE | STANDARD`, `budgetPolicy`는 `USER_BUDGET | OPEN_BUDGET | DEFAULT_BUDGET` 중 하나다. `ragSourceIds`와 `parseEvidenceSummary`는 요구사항 파싱에 사용된 RAG 근거 묶음을 추적하기 위한 내부 필드다. 예산 없는 최고급 의도는 RAG 정책 근거를 사용해 `performanceTier=ENTHUSIAST`, `budgetPolicy=OPEN_BUDGET`으로 저장할 수 있고, 추천 결과는 첫 카드부터 끝판왕/하이엔드 체급으로 정렬한다. 사용자가 예산을 명시한 경우에는 예산을 우선한다.
 
 `POST /api/builds/recommend` transaction 경계:
 
@@ -171,6 +173,26 @@ Google OAuth 정책:
 5. Tool/RAG 계산 결과가 없어 fallback build를 저장하는 경우에는 `agent_sessions.state_timeline`에 `FALLBACK_READY -> SUCCEEDED`를 남기고, response의 `warnings`에 fallback 사유를 포함한다.
 6. response에 포함된 `agentSessionId`, `recommendations[].id`, `evidenceIds`는 모두 같은 최종 저장 transaction에서 commit된 `public_id`다.
 7. 1번 추천 API는 `agent_sessions`, `tool_invocations`, `rag_evidence`를 직접 조작하지 않고, 3번이 제공하는 내부 Agent trace service를 호출해 추적 데이터를 기록한다.
+
+### Quote Draft
+
+수동 견적초안은 상품 상세/셀프 견적 화면에서 사용자가 직접 담은 부품 목록이다. AI 추천 결과인 `builds/build_items`와 분리한다.
+
+| Method | Path | Auth | Owner | Request 예시 | Response 예시 | 관련 DB table |
+|---|---|---|---|---|---|---|
+| `GET` | `/api/quote-drafts/current` | USER | 2번 | - | `{ "id": null, "status": "EMPTY", "name": "셀프 견적", "items": [], "totalPrice": 0, "itemCount": 0 }` | `quote_drafts`, `quote_draft_items`, `parts` |
+| `PUT` | `/api/quote-drafts/current/items/{partId}` | USER | 2번 | `{ "quantity": 2 }` | `{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd", "status": "ACTIVE", "items": [{ "partId": "0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11", "category": "RAM", "name": "DDR5 32GB", "quantity": 2, "currentPrice": 120000, "lineTotal": 240000 }], "totalPrice": 240000, "itemCount": 2 }` | `quote_drafts`, `quote_draft_items`, `parts` |
+| `PATCH` | `/api/quote-drafts/current/items/{partId}` | USER | 2번 | `{ "quantity": 1 }` | `QuoteDraftDto` | `quote_draft_items`, `parts` |
+| `DELETE` | `/api/quote-drafts/current/items/{partId}` | USER | 2번 | - | `QuoteDraftDto` | `quote_draft_items`, `parts` |
+
+수동 견적초안 규칙:
+
+- `GET /api/quote-drafts/current`는 active draft가 없어도 DB row를 만들지 않고 `status=EMPTY` DTO를 반환한다.
+- `PUT item`은 active draft가 없으면 생성한 뒤 item을 저장한다.
+- `CPU`, `GPU`, `MOTHERBOARD`, `PSU`, `CASE`, `COOLER`는 같은 category의 다른 부품을 담으면 기존 active item을 교체한다.
+- `RAM`, `STORAGE`는 서로 다른 상품을 여러 개 담을 수 있다. 같은 상품을 다시 담으면 row를 추가하지 않고 `quantity`를 갱신한다.
+- 단일 구성 카테고리의 `quantity`는 1만 허용한다. `RAM`, `STORAGE`의 `quantity`는 1~9만 허용한다.
+- `totalPrice`와 `lineTotal`은 현재 `parts.price` 기준으로 계산한다. `unitPriceAtAdd`는 담은 시점 추적용이다.
 
 ### Parts/Price
 
@@ -272,6 +294,9 @@ RAG 공개 범위:
 
 - 일반 RAG API는 요약 중심이다.
 - admin RAG API는 `chunkText`, `metadata`, `score`를 포함할 수 있다.
+- `GET /api/rag/search`는 `page=0`, `size=20`, `size<=100` pagination 기준을 따른다.
+- `agent_session_id`가 없는 `rag_evidence` row는 재사용 지식 청크로 검색 대상에 포함된다.
+- Agent 실행 중 선택된 RAG 청크는 세션별 `rag_evidence` row로 복사되어 `evidenceIds`에 노출된다.
 
 `POST /api/agent/sessions/{id}/run` 409 조건:
 
@@ -384,31 +409,52 @@ Agent 실행 방식:
 | `RequirementParseRequest` | `message` | `string` | no | `150만원 게임용 PC` |
 | `RequirementParseRequest` | `budget` | `number` | yes | `1500000` |
 | `RequirementParseRequest` | `usageTags` | `string[]` | yes | `["GAMING"]` |
+| `RequirementParseRequest` | `resolution` | `string` | yes | `QHD` |
+| `RequirementParseRequest` | `preferredVendors` | `string[]` | yes | `["NVIDIA"]` |
+| `RequirementParseRequest` | `priority` | `string` | yes | `성능` |
 | `RequirementDto` | `id` | `string` | no | `2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11` |
 | `RequirementDto` | `rawMessage` | `string` | no | `150만원 게임용 PC` |
 | `RequirementDto` | `budget` | `number` | yes | `1500000` |
 | `RequirementDto` | `usageTags` | `string[]` | yes | `["GAMING"]` |
 | `RequirementDto` | `parsedContext` | `object` | yes | `{ "usageTags": ["GAMING"] }` |
+| `RequirementDto` | `questions` | `RequirementQuestionDto[]` | no | `[{ "key": "noisePreference" }]` |
+| `RequirementDto` | `agentSessionId` | `string` | yes | `7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a` |
+| `RequirementDto` | `agentSummary` | `string` | yes | `요구사항을 구조화했습니다.` |
+| `RequirementDto` | `evidenceIds` | `string[]` | yes | `["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"]` |
 | `BuildRecommendRequest` | `requirementId` | `string` | no | `2e0f8c9c-8e1c-4d75-94a2-5d6a4977de11` |
+| `BuildRecommendRequest` | `answers` | `object` | yes | `{ "noisePreference": "조용한 편" }` |
 | `BuildRecommendResponse` | `agentSessionId` | `string` | no | `7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a` |
 | `BuildRecommendResponse` | `recommendations` | `BuildDto[]` | no | `[{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd" }]` |
 | `BuildRecommendResponse` | `warnings` | `WarningDto[]` | no | `[]` |
 | `BuildRecommendResponse` | `evidenceIds` | `string[]` | no | `["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"]` |
+| `BuildRecommendResponse` | `toolResults` | `ToolResultDto[]` | yes | `[]` |
 | `BuildDto` | `id` | `string` | no | `3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd` |
 | `BuildDto` | `name` | `string` | no | `QHD Gaming Build` |
+| `BuildDto` | `recommendedFor` | `string` | yes | `균형 우선` |
+| `BuildDto` | `summary` | `string` | yes | `내부 자산 기반 추천` |
 | `BuildDto` | `totalPrice` | `number` | no | `1450000` |
 | `BuildDto` | `confidence` | `string` | no | `HIGH` |
 | `BuildDto` | `items` | `BuildItemDto[]` | no | `[]` |
 | `BuildDto` | `warnings` | `WarningDto[]` | no | `[]` |
+| `BuildDto` | `toolResults` | `ToolResultDto[]` | yes | `[{ "tool": "compatibility", "status": "PASS" }]` |
 | `BuildDto` | `evidenceIds` | `string[]` | no | `["9ebf5278-68aa-42a5-96f4-8ec0f90f0f77"]` |
+| `BuildDto` | `agentSessionId` | `string` | yes | `7dfb98c8-7f35-4fd3-95e0-dfd58cbda77a` |
+| `BuildDto` | `agentSummary` | `string` | yes | `추천 근거 요약` |
 | `BuildDto` | `changeableCategories` | `string[]` | no | `["GPU", "RAM"]` |
 | `BuildDto` | `createdAt` | `string` | yes | `2026-06-29T10:20:00Z` |
 | `BuildItemDto` | `category` | `string` | no | `GPU` |
 | `BuildItemDto` | `partId` | `string` | no | `0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11` |
 | `BuildItemDto` | `name` | `string` | no | `RTX 4070` |
+| `BuildItemDto` | `manufacturer` | `string` | yes | `NVIDIA` |
 | `BuildItemDto` | `price` | `number` | no | `850000` |
+| `BuildItemDto` | `attributes` | `object` | yes | `{ "lengthMm": 304 }` |
 | `ChangePartRequest` | `category` | `string` | no | `GPU` |
 | `ChangePartRequest` | `partId` | `string` | no | `0e9f3b8b-8c83-4d9a-9f7d-1f2b4dfb8a11` |
+| `ChangePartResponse` | `beforeBuild` | `BuildDto` | no | `{ "id": "3ff6d7a2-1c51-4c9d-9720-94b7ef1d62bd" }` |
+| `ChangePartResponse` | `afterBuild` | `object` | no | `{ "totalPrice": 1500000, "items": [] }` |
+| `ChangePartResponse` | `diffRows` | `ChangePartDiffRowDto[]` | no | `[{ "label": "GPU", "diff": "+50,000원" }]` |
+| `ChangePartResponse` | `toolResults` | `ToolResultDto[]` | no | `[{ "tool": "power", "status": "PASS" }]` |
+| `ChangePartResponse` | `agentSummary` | `string` | yes | `변경 비교 요약` |
 
 ### Parts/Price/Tool DTO
 
