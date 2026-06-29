@@ -120,16 +120,118 @@ test('renders admin page when auth/me returns ADMIN role', async ({ page }) => {
       body: JSON.stringify({ id: 'admin-001', email: 'admin@example.com', role: 'ADMIN' })
     });
   });
+  await page.route('**/api/admin/agent-sessions/demo-session', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'demo-session',
+        status: 'SUCCEEDED',
+        summary: 'Agent trace completed.',
+        purpose: 'BUILD_RECOMMEND',
+        stateTimeline: [
+          { from: null, to: 'QUEUED', actor: 'USER', at: '2026-06-29T10:00:00Z', reason: 'created' },
+          { from: 'QUEUED', to: 'RUNNING', actor: 'SYSTEM', at: '2026-06-29T10:00:01Z', reason: 'started' }
+        ],
+        toolInvocations: [
+          {
+            id: 'tool-001',
+            agentSessionId: 'demo-session',
+            toolName: 'compatibility',
+            status: 'PASS',
+            confidence: 'HIGH',
+            summary: 'Compatibility check passed.',
+            latencyMs: 40
+          }
+        ],
+        evidenceIds: ['rag-001']
+      })
+    });
+  });
+  await page.route('**/api/admin/rag-evidence/rag-001', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'rag-001',
+        agentSessionId: 'demo-session',
+        sourceId: 'internal-rule-demo',
+        summary: 'Demo RAG evidence.',
+        score: 0.91,
+        metadata: { sourceType: 'INTERNAL_RULE' }
+      })
+    });
+  });
 
   await page.goto('/admin/agent-sessions/demo-session');
 
   await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeHidden();
   await expect(page.locator('body')).toContainText('Agent / RAG / Tool 근거 상세');
-  await expect(page.getByRole('main')).toContainText('Agent 상태 전이');
+  await expect(page.getByRole('main')).toContainText('Agent 실행 Trace');
+  await expect(page.getByRole('main')).toContainText('Compatibility check passed.');
   expect(authMeCalls).toBeGreaterThan(0);
 });
 
 test('renders admin dashboard with ADMIN role and dashboard API response', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'demo-jwt-admin');
+  });
+  let authMeAuthorization: string | undefined;
+  await page.route('**/api/auth/me', async (route) => {
+    authMeAuthorization = route.request().headers().authorization;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'admin-001', email: 'admin@example.com', role: 'ADMIN' })
+    });
+  });
+  let dashboardCalls = 0;
+  let dashboardAuthorization: string | undefined;
+  await page.route('**/api/admin/dashboard', async (route) => {
+    dashboardCalls += 1;
+    dashboardAuthorization = route.request().headers().authorization;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        agentRunning: 1,
+        openTickets: 3,
+        priceJobsRunning: 0,
+        degraded: false,
+        generatedAt: '2026-06-29T10:50:00Z'
+      })
+    });
+  });
+
+  await page.goto('/admin');
+
+  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeHidden();
+  await expect(page.locator('main')).toContainText('진행 중 Agent');
+  await expect(page.locator('main')).toContainText('미해결 AS');
+  await expect(page.locator('main')).toContainText('실행 중 Price Job');
+  await expect(page.locator('main')).toContainText('운영 상태');
+  await expect(page.locator('main')).toContainText('1건');
+  await expect(page.locator('main')).toContainText('3건');
+  await expect(page.locator('main')).toContainText('0건');
+  await expect(page.locator('main')).toContainText('정상');
+  await expect(page.locator('main')).toContainText('2026-06-29T10:50:00Z');
+  await expect(page.locator('main')).toContainText('최근 Agent 세션 요약');
+  await expect(page.locator('main')).toContainText('운영 작업');
+  await expect(page.locator('main')).toContainText('관리자 할 일');
+  await expect(page.locator('main')).toContainText('가격 Job');
+  await expect(page.locator('main')).toContainText('Mailpit');
+  await expect(page.locator('main')).toContainText('Mock Worker');
+  await expect(page.locator('main')).toContainText('k6 Smoke');
+  await expect(page.locator('main')).toContainText('부품/가격');
+  await expect(page.locator('main')).toContainText('Agent/RAG');
+  await expect(page.locator('main')).toContainText('AS 티켓');
+  await expect(page.locator('main')).not.toContainText('undefined');
+  expect(authMeAuthorization).toBe('Bearer demo-jwt-admin');
+  expect(dashboardCalls).toBe(1);
+  expect(dashboardAuthorization).toBe('Bearer demo-jwt-admin');
+});
+
+test('shows degraded alert on admin dashboard when dashboard API reports degraded', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('buildgraph.token', 'demo-jwt-admin');
   });
@@ -145,19 +247,88 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        llmQueueP95: '12초',
-        apiP95: '210ms',
-        asOpen: 3,
-        recommendationSuccess: '98%'
+        agentRunning: 4,
+        openTickets: 7,
+        priceJobsRunning: 2,
+        degraded: true,
+        generatedAt: '2026-06-29T11:05:00Z'
       })
     });
   });
 
   await page.goto('/admin');
 
-  await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeHidden();
-  await expect(page.locator('main')).toContainText('12초');
-  await expect(page.locator('main')).toContainText('210ms');
-  await expect(page.locator('main')).toContainText('3건');
-  await expect(page.locator('main')).toContainText('98%');
+  await expect(page.locator('main')).toContainText('운영 상태 주의');
+  await expect(page.locator('main')).toContainText('일부 운영 지표가 주의 상태입니다.');
+  await expect(page.locator('main')).toContainText('4건');
+  await expect(page.locator('main')).toContainText('7건');
+  await expect(page.locator('main')).toContainText('2건');
+  await expect(page.locator('main')).toContainText('주의');
+  await expect(page.locator('main')).not.toContainText('undefined');
+});
+
+test('shows admin dashboard loading state while dashboard API is pending', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'demo-jwt-admin');
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'admin-001', email: 'admin@example.com', role: 'ADMIN' })
+    });
+  });
+
+  let releaseDashboard: (() => void) | undefined;
+  const dashboardReady = new Promise<void>((resolve) => {
+    releaseDashboard = resolve;
+  });
+  await page.route('**/api/admin/dashboard', async (route) => {
+    await dashboardReady;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        agentRunning: 1,
+        openTickets: 3,
+        priceJobsRunning: 0,
+        degraded: false,
+        generatedAt: '2026-06-29T10:50:00Z'
+      })
+    });
+  });
+
+  await page.goto('/admin');
+
+  await expect(page.getByText('대시보드 로딩 중')).toBeVisible();
+  await expect(page.getByText('운영 지표를 불러오고 있습니다.')).toBeVisible();
+
+  releaseDashboard?.();
+  await expect(page.locator('main')).toContainText('진행 중 Agent');
+  await expect(page.locator('main')).toContainText('1건');
+});
+
+test('shows admin dashboard error state when dashboard API fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'demo-jwt-admin');
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'admin-001', email: 'admin@example.com', role: 'ADMIN' })
+    });
+  });
+  await page.route('**/api/admin/dashboard', async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'INTERNAL_ERROR', message: '대시보드 조회 실패' })
+    });
+  });
+
+  await page.goto('/admin');
+
+  await expect(page.getByText('대시보드 조회 실패')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('관리자 대시보드 API 응답을 불러오지 못했습니다.')).toBeVisible();
 });
