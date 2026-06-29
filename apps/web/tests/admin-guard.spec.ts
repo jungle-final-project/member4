@@ -155,6 +155,13 @@ test('renders eight admin shell navigation entries for ADMIN role', async ({ pag
       })
     });
   });
+  await page.route('**/api/admin/audit-logs/recent', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] })
+    });
+  });
 
   await page.goto('/admin');
 
@@ -230,6 +237,27 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
       })
     });
   });
+  let auditLogCalls = 0;
+  let auditLogAuthorization: string | undefined;
+  await page.route('**/api/admin/audit-logs/recent', async (route) => {
+    auditLogCalls += 1;
+    auditLogAuthorization = route.request().headers().authorization;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          {
+            action: 'AS_TICKET_UPDATED',
+            targetType: 'as_tickets',
+            targetId: '4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a',
+            metadata: { beforeStatus: 'OPEN', afterStatus: 'IN_PROGRESS' },
+            createdAt: '2026-06-29T10:45:00Z'
+          }
+        ]
+      })
+    });
+  });
 
   await page.goto('/admin');
 
@@ -246,6 +274,11 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
   await expect(page.locator('main')).toContainText('최근 Agent 세션 요약');
   await expect(page.locator('main')).toContainText('운영 작업');
   await expect(page.locator('main')).toContainText('관리자 할 일');
+  await expect(page.locator('main')).toContainText('최근 관리자 작업');
+  await expect(page.locator('main')).toContainText('AS_TICKET_UPDATED');
+  await expect(page.locator('main')).toContainText('as_tickets');
+  await expect(page.locator('main')).toContainText('4aef8ef7-1dc7-45d1-bfc2-bb0cfdaf7f8a');
+  await expect(page.locator('main')).toContainText('2026-06-29T10:45:00Z');
   await expect(page.locator('main')).toContainText('가격 Job');
   await expect(page.locator('main')).toContainText('Mailpit');
   await expect(page.locator('main')).toContainText('Mock Worker');
@@ -257,6 +290,8 @@ test('renders admin dashboard with ADMIN role and dashboard API response', async
   expect(authMeAuthorization).toBe('Bearer demo-jwt-admin');
   expect(dashboardCalls).toBe(1);
   expect(dashboardAuthorization).toBe('Bearer demo-jwt-admin');
+  expect(auditLogCalls).toBe(1);
+  expect(auditLogAuthorization).toBe('Bearer demo-jwt-admin');
 });
 
 test('shows degraded alert on admin dashboard when dashboard API reports degraded', async ({ page }) => {
@@ -283,6 +318,13 @@ test('shows degraded alert on admin dashboard when dashboard API reports degrade
       })
     });
   });
+  await page.route('**/api/admin/audit-logs/recent', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] })
+    });
+  });
 
   await page.goto('/admin');
 
@@ -292,6 +334,47 @@ test('shows degraded alert on admin dashboard when dashboard API reports degrade
   await expect(page.locator('main')).toContainText('7건');
   await expect(page.locator('main')).toContainText('2건');
   await expect(page.locator('main')).toContainText('주의');
+  await expect(page.locator('main')).not.toContainText('undefined');
+});
+
+test('keeps admin dashboard usable when audit logs API fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('buildgraph.token', 'demo-jwt-admin');
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'admin-001', email: 'admin@example.com', role: 'ADMIN' })
+    });
+  });
+  await page.route('**/api/admin/dashboard', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        agentRunning: 1,
+        openTickets: 3,
+        priceJobsRunning: 0,
+        degraded: false,
+        generatedAt: '2026-06-29T10:50:00Z'
+      })
+    });
+  });
+  await page.route('**/api/admin/audit-logs/recent', async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 'INTERNAL_ERROR', message: '감사 로그 조회 실패' })
+    });
+  });
+
+  await page.goto('/admin');
+
+  await expect(page.locator('main')).toContainText('진행 중 Agent');
+  await expect(page.locator('main')).toContainText('1건');
+  await expect(page.locator('main')).toContainText('감사 로그 조회 실패');
+  await expect(page.locator('main')).toContainText('최근 관리자 작업을 불러오지 못했습니다.');
   await expect(page.locator('main')).not.toContainText('undefined');
 });
 
