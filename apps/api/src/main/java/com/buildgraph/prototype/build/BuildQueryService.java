@@ -527,20 +527,23 @@ public class BuildQueryService {
         String sessionId = null;
         try {
             sessionId = agentTraceService.createQueuedSession(root, "SYSTEM", profile.purpose());
+            String activeSessionId = sessionId;
             agentTraceService.advanceStatus(sessionId, AgentStatus.RUNNING, "SYSTEM", "requirement parse agent requested");
-            AgentRagEvidenceDraft evidence = agentRagRetrievalService.retrieveEvidence(root, profile);
-            String evidenceId = agentTraceService.recordRagEvidence(sessionId, evidence);
-            agentTraceService.advanceStatus(sessionId, AgentStatus.RAG_SEARCHED, "SYSTEM", "requirement parse RAG evidence retrieved");
+            List<AgentRagEvidenceDraft> evidenceSet = agentRagRetrievalService.retrieveEvidenceSet(root, profile);
+            List<String> evidenceIds = evidenceSet.stream()
+                    .map(evidence -> agentTraceService.recordRagEvidence(activeSessionId, evidence))
+                    .toList();
+            agentTraceService.advanceStatus(sessionId, AgentStatus.RAG_SEARCHED, "SYSTEM", "requirement parse RAG evidence set retrieved");
 
             if (openAiResponsesClient.isConfigured()) {
                 try {
-                    Map<String, Object> llmContext = llmParsedContext(message, request, fallbackContext, evidenceId, evidence);
+                    Map<String, Object> llmContext = llmParsedContext(message, request, fallbackContext, evidenceIds, evidenceSet);
                     Map<String, Object> parsedContext = withAgentParseMetadata(
                             normalizeParsedContext(llmContext, fallbackContext),
                             "AGENT_RAG_LLM",
                             sessionId,
-                            List.of(evidenceId),
-                            evidence,
+                            evidenceIds,
+                            evidenceSet,
                             text(llmContext.get("parseNotes")),
                             null
                     );
@@ -552,14 +555,14 @@ public class BuildQueryService {
                     agentTraceService.updateSummary(sessionId, summary);
                     agentTraceService.advanceStatus(sessionId, AgentStatus.SUMMARY_READY, "SYSTEM", "requirement parse context generated");
                     agentTraceService.advanceStatus(sessionId, AgentStatus.SUCCEEDED, "SYSTEM", "requirement parse agent completed");
-                    return new RequirementParseResult(parsedContext, sessionId, summary, List.of(evidenceId));
+                    return new RequirementParseResult(parsedContext, sessionId, summary, evidenceIds);
                 } catch (RuntimeException llmError) {
                     Map<String, Object> parsedContext = withAgentParseMetadata(
                             fallbackContext,
                             "AGENT_RAG_FALLBACK",
                             sessionId,
-                            List.of(evidenceId),
-                            evidence,
+                            evidenceIds,
+                            evidenceSet,
                             "LLM structured parse failed; deterministic normalizer kept the request usable.",
                             safeReason(llmError)
                     );
@@ -567,7 +570,7 @@ public class BuildQueryService {
                     agentTraceService.updateSummary(sessionId, summary);
                     agentTraceService.advanceStatus(sessionId, AgentStatus.FALLBACK_READY, "SYSTEM", "requirement parse LLM failed");
                     agentTraceService.advanceStatus(sessionId, AgentStatus.SUCCEEDED, "SYSTEM", "requirement parse fallback completed");
-                    return new RequirementParseResult(parsedContext, sessionId, summary, List.of(evidenceId));
+                    return new RequirementParseResult(parsedContext, sessionId, summary, evidenceIds);
                 }
             }
 
@@ -575,8 +578,8 @@ public class BuildQueryService {
                     fallbackContext,
                     "AGENT_RAG_DETERMINISTIC",
                     sessionId,
-                    List.of(evidenceId),
-                    evidence,
+                    evidenceIds,
+                    evidenceSet,
                     "RAG evidence retrieved; deterministic normalizer produced the structured context because OpenAI is not configured.",
                     null
             );
@@ -585,14 +588,14 @@ public class BuildQueryService {
             agentTraceService.updateSummary(sessionId, summary);
             agentTraceService.advanceStatus(sessionId, AgentStatus.SUMMARY_READY, "SYSTEM", "requirement parse context generated");
             agentTraceService.advanceStatus(sessionId, AgentStatus.SUCCEEDED, "SYSTEM", "requirement parse agent completed");
-            return new RequirementParseResult(parsedContext, sessionId, summary, List.of(evidenceId));
+            return new RequirementParseResult(parsedContext, sessionId, summary, evidenceIds);
         } catch (RuntimeException error) {
             Map<String, Object> parsedContext = withAgentParseMetadata(
                     fallbackContext,
                     "DETERMINISTIC_FALLBACK",
                     sessionId,
                     List.of(),
-                    null,
+                    List.of(),
                     "Requirement parse Agent failed before RAG evidence could be attached; deterministic normalizer was used.",
                     safeReason(error)
             );
@@ -604,8 +607,8 @@ public class BuildQueryService {
             String message,
             Map<String, Object> request,
             Map<String, Object> fallbackContext,
-            String evidenceId,
-            AgentRagEvidenceDraft evidence
+            List<String> evidenceIds,
+            List<AgentRagEvidenceDraft> evidenceSet
     ) {
         String output = openAiResponsesClient.createSummary(
                 REQUIREMENT_PARSE_SYSTEM_PROMPT,
@@ -613,14 +616,7 @@ public class BuildQueryService {
                         "rawMessage", message,
                         "optionalInputs", request,
                         "fallbackNormalizer", fallbackContext,
-                        "ragEvidence", MockData.map(
-                                "id", evidenceId,
-                                "sourceId", evidence.sourceId(),
-                                "summary", evidence.summary(),
-                                "chunkText", evidence.chunkText(),
-                                "score", evidence.score(),
-                                "metadata", evidence.metadata()
-                        ),
+                        "ragEvidenceSet", evidenceItems(evidenceIds, evidenceSet),
                         "requiredJsonShape", MockData.map(
                                 "budget", "integer or null",
                                 "usageTags", List.of("GAMING", "DEVELOPMENT", "VIDEO_EDIT", "AI_DEV", "GENERAL"),
@@ -671,22 +667,57 @@ public class BuildQueryService {
             String parseMode,
             String sessionId,
             List<String> evidenceIds,
-            AgentRagEvidenceDraft evidence,
+            List<AgentRagEvidenceDraft> evidenceSet,
             String parseNotes,
             String fallbackReason
     ) {
+        AgentRagEvidenceDraft primaryEvidence = primaryEvidence(evidenceSet);
         Map<String, Object> result = new LinkedHashMap<>(normalizeParsedContext(context, context));
         result.put("parseMode", parseMode);
         result.put("parser", "requirement-parse-agent-v1");
         result.put("agentSessionId", sessionId);
         result.put("evidenceIds", evidenceIds);
-        result.put("ragGuidance", evidence == null ? null : evidence.summary());
-        result.put("ragSourceId", evidence == null ? null : evidence.sourceId());
+        result.put("ragGuidance", primaryEvidence == null ? null : primaryEvidence.summary());
+        result.put("ragSourceId", primaryEvidence == null ? null : primaryEvidence.sourceId());
+        result.put("ragSourceIds", evidenceSet.stream().map(AgentRagEvidenceDraft::sourceId).toList());
+        result.put("parseEvidenceSummary", evidenceSummary(evidenceSet));
         result.put("parseNotes", parseNotes);
         if (fallbackReason != null) {
             result.put("fallbackReason", fallbackReason);
         }
         return result;
+    }
+
+    private static AgentRagEvidenceDraft primaryEvidence(List<AgentRagEvidenceDraft> evidenceSet) {
+        return evidenceSet == null || evidenceSet.isEmpty() ? null : evidenceSet.get(0);
+    }
+
+    private static String evidenceSummary(List<AgentRagEvidenceDraft> evidenceSet) {
+        if (evidenceSet == null || evidenceSet.isEmpty()) {
+            return null;
+        }
+        return evidenceSet.stream()
+                .map(AgentRagEvidenceDraft::summary)
+                .filter(summary -> summary != null && !summary.isBlank())
+                .limit(3)
+                .reduce((left, right) -> left + " | " + right)
+                .orElse(null);
+    }
+
+    private static List<Map<String, Object>> evidenceItems(List<String> ids, List<AgentRagEvidenceDraft> evidenceSet) {
+        return java.util.stream.IntStream.range(0, evidenceSet.size())
+                .mapToObj(index -> {
+                    AgentRagEvidenceDraft evidence = evidenceSet.get(index);
+                    return MockData.map(
+                            "id", ids.get(index),
+                            "sourceId", evidence.sourceId(),
+                            "summary", evidence.summary(),
+                            "chunkText", evidence.chunkText(),
+                            "score", evidence.score(),
+                            "metadata", evidence.metadata()
+                    );
+                })
+                .toList();
     }
 
     private static Map<String, Object> normalizeParsedContext(Map<String, Object> source, Map<String, Object> fallback) {

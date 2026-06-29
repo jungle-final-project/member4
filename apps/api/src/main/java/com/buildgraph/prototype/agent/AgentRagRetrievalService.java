@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AgentRagRetrievalService {
     private static final Pattern TOKEN_SPLIT = Pattern.compile("[^0-9A-Za-z가-힣]+");
+    private static final int DEFAULT_EVIDENCE_LIMIT = 3;
     private final JdbcTemplate jdbcTemplate;
 
     public AgentRagRetrievalService(JdbcTemplate jdbcTemplate) {
@@ -26,14 +27,27 @@ public class AgentRagRetrievalService {
     }
 
     public AgentRagEvidenceDraft retrieveEvidence(AgentSessionRoot root, AgentRunProfile profile) {
+        return retrieveEvidenceSet(root, profile, 1).stream()
+                .findFirst()
+                .orElseGet(() -> AgentRunTraceDrafts.ragEvidence(root, profile));
+    }
+
+    public List<AgentRagEvidenceDraft> retrieveEvidenceSet(AgentSessionRoot root, AgentRunProfile profile, int limit) {
         RootContext context = rootContext(root);
         List<String> queryTokens = tokens(context.queryText());
-        return reusableEvidenceRows().stream()
+        List<RetrievalCandidate> ranked = reusableEvidenceRows().stream()
                 .map(row -> candidate(row, root, profile, context, queryTokens))
                 .filter(candidate -> candidate.allowed())
-                .max(Comparator.comparingDouble(RetrievalCandidate::rank))
+                .sorted(Comparator.comparingDouble(RetrievalCandidate::rank).reversed())
+                .toList();
+        List<AgentRagEvidenceDraft> selected = diversify(ranked, safeLimit(limit)).stream()
                 .map(RetrievalCandidate::draft)
-                .orElseGet(() -> AgentRunTraceDrafts.ragEvidence(root, profile));
+                .toList();
+        return selected.isEmpty() ? List.of(AgentRunTraceDrafts.ragEvidence(root, profile)) : selected;
+    }
+
+    public List<AgentRagEvidenceDraft> retrieveEvidenceSet(AgentSessionRoot root, AgentRunProfile profile) {
+        return retrieveEvidenceSet(root, profile, DEFAULT_EVIDENCE_LIMIT);
     }
 
     private List<Map<String, Object>> reusableEvidenceRows() {
@@ -76,12 +90,21 @@ public class AgentRagRetrievalService {
                 matchedTokens++;
             }
         }
+        String metadataText = sourceMetadata.toString().toLowerCase(Locale.ROOT);
+        int matchedMetadataTokens = 0;
+        for (String token : queryTokens) {
+            if (metadataText.contains(token.toLowerCase(Locale.ROOT))) {
+                matchedMetadataTokens++;
+            }
+        }
         double tokenScore = queryTokens.isEmpty() ? 0.0 : matchedTokens / (double) queryTokens.size();
+        double metadataScore = queryTokens.isEmpty() ? 0.0 : matchedMetadataTokens / (double) queryTokens.size();
         double baseScore = score(row);
-        double rank = baseScore
-                + (purpose != null && purpose.equals(profile.purpose().name()) ? 0.18 : 0.0)
-                + (sourceTypeAllowed ? 0.12 : 0.0)
-                + (tokenScore * 0.20);
+        double rank = (baseScore * 0.50)
+                + (purpose != null && purpose.equals(profile.purpose().name()) ? 0.25 : 0.0)
+                + (sourceTypeAllowed ? 0.10 : 0.0)
+                + tokenScore
+                + (metadataScore * 0.35);
 
         Map<String, Object> metadata = new LinkedHashMap<>(sourceMetadata);
         metadata.put("sourceEvidenceId", DbValueMapper.string(row, "id"));
@@ -91,6 +114,7 @@ public class AgentRagRetrievalService {
         metadata.put("rootId", root.publicId());
         metadata.put("retrievalQuery", context.queryText());
         metadata.put("matchedTokenCount", matchedTokens);
+        metadata.put("matchedMetadataTokenCount", matchedMetadataTokens);
         metadata.put("queryTokenCount", queryTokens.size());
         metadata.put("retrievalRank", rounded(rank));
         metadata.put("retrievedAt", MockData.now());
@@ -103,7 +127,41 @@ public class AgentRagRetrievalService {
                         .setScale(5, RoundingMode.HALF_UP),
                 metadata
         );
-        return new RetrievalCandidate(allowed, rank, draft);
+        return new RetrievalCandidate(allowed, rank, sourceType, draft);
+    }
+
+    private static List<RetrievalCandidate> diversify(List<RetrievalCandidate> ranked, int limit) {
+        List<RetrievalCandidate> result = new ArrayList<>();
+        Set<String> selectedSourceTypes = new LinkedHashSet<>();
+        Set<String> selectedSourceIds = new LinkedHashSet<>();
+        for (RetrievalCandidate candidate : ranked) {
+            if (result.size() >= limit) {
+                break;
+            }
+            String sourceType = safe(candidate.sourceType());
+            String sourceId = candidate.draft().sourceId();
+            if (!sourceId.isBlank() && !selectedSourceIds.contains(sourceId) && selectedSourceTypes.add(sourceType)) {
+                result.add(candidate);
+                selectedSourceIds.add(sourceId);
+            }
+        }
+        for (RetrievalCandidate candidate : ranked) {
+            if (result.size() >= limit) {
+                break;
+            }
+            String sourceId = candidate.draft().sourceId();
+            if (!sourceId.isBlank() && selectedSourceIds.add(sourceId)) {
+                result.add(candidate);
+            }
+        }
+        return result;
+    }
+
+    private static int safeLimit(int limit) {
+        if (limit < 1) {
+            return 1;
+        }
+        return Math.min(limit, 10);
     }
 
     private RootContext rootContext(AgentSessionRoot root) {
@@ -233,6 +291,6 @@ public class AgentRagRetrievalService {
     private record RootContext(String queryText) {
     }
 
-    private record RetrievalCandidate(boolean allowed, double rank, AgentRagEvidenceDraft draft) {
+    private record RetrievalCandidate(boolean allowed, double rank, String sourceType, AgentRagEvidenceDraft draft) {
     }
 }
