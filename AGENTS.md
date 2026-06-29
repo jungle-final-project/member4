@@ -26,24 +26,32 @@ BuildGraph AI는 사용자가 예산, 용도, 우선순위, 브랜드 선호를 
 
 ## Codex 작업 시작 전 필수 확인 문서
 
-Codex나 개발자는 코드 수정 전에 아래 문서를 순서대로 확인한다. 공통 계약과 코드가 충돌하면 추정 구현하지 말고 먼저 계약 문서를 기준으로 판단한다.
+Codex나 개발자는 코드 수정 전에 변경 범위에 맞춰 아래 문서를 순서대로 확인한다. 공통 계약과 코드가 충돌하면 추정 구현하지 말고 먼저 계약 문서를 기준으로 판단한다.
 
 | 순서 | 문서 | 목적 |
 | --- | --- | --- |
 | 1 | `docs/API_CONTRACT.md` | API 요청/응답, 인증, pagination, 오류, public_id 계약 확인 |
 | 2 | `docs/DB_SCHEMA.md` | 공통 DB 테이블, 상태 전이, JSONB, Flyway 기준 확인 |
 | 3 | `docs/ROUTE_OWNERSHIP.md` | 담당자별 route/API/DB/file owner와 공유 지점 확인 |
-| 4 | `README.md` | 실행 방법, 기술 스택, PR 전 확인 |
-| 5 | `docs/openapi.yaml` | API 계약의 기계 검증용 OpenAPI 확인 |
+| 4 | `docs/openapi.yaml` | API 요청/응답 계약의 기계 검증 기준 확인 |
+| 5 | `README.md` | 실행 방법, 기술 스택, PR 전 확인 |
 | 6 | `docs/role-workspaces.md` | 담당자별 파일 소유권과 PR 범위 |
 | 7 | `docs/sprint-1-start-checklist.md` | 첫 PR 기준과 완료 조건 |
 | 8 | `docs/architecture.md` | 런타임 흐름, 도메인 구조 |
 | 9 | `docs/scaffold-decisions.md` | 현재 스캐폴드 결정사항 |
+| 10 | `apps/pc-agent/README.md` | PC Agent/AS 로그 작업 기준 |
 
 담당별 추가 확인:
 
 - 3번 Agent/RAG/Tool 담당자는 `docs/API_CONTRACT.md`의 Agent/RAG 섹션, `docs/DB_SCHEMA.md`의 `agent_sessions`, `tool_invocations`, `rag_evidence`, `docs/ROUTE_OWNERSHIP.md`의 3번 영역을 먼저 확인한다.
 - 4번 PC Agent/AS 담당자는 `apps/pc-agent/README.md`와 Support/AS 계약을 함께 확인한다.
+
+변경 범위별 필수 확인 규칙:
+
+- API path, request, response, error code, auth, pagination을 바꾸는 작업은 `docs/API_CONTRACT.md`, `docs/openapi.yaml`, `docs/ROUTE_OWNERSHIP.md`를 먼저 확인한다.
+- DB table, column, FK, index, enum/status, 상태 전이, JSONB shape를 바꾸는 작업은 `docs/DB_SCHEMA.md`, `docs/API_CONTRACT.md`, `docs/ROUTE_OWNERSHIP.md`를 먼저 확인한다.
+- frontend route, backend package, 담당자 owner, 공통 파일을 바꾸는 작업은 `docs/ROUTE_OWNERSHIP.md`와 `docs/role-workspaces.md`를 먼저 확인한다.
+- PC Agent, 로그 업로드, AS 티켓 작업은 `apps/pc-agent/README.md`, `docs/API_CONTRACT.md`, `docs/DB_SCHEMA.md`, `docs/ROUTE_OWNERSHIP.md`를 먼저 확인한다.
 
 ## 기술 스택과 구조
 
