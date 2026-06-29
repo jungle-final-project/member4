@@ -25,23 +25,27 @@
 
 ## 와이어프레임 기준 작업 화면
 
-3번이 직접 구현 책임을 가지는 화면은 사용자 쇼핑몰 메인 화면이 아니라, 운영자가 Agent 판단 근거를 확인하는 관리자 상세 화면이다.
+3번이 직접 구현 책임을 가지는 메인 와이어프레임은 `shop_spec_real_screens_v3_no_handoff.png` 기준 **3행 4번째 화면**이다. 화면 상단 path는 `/admin/agent-sessions/:id`이고, 왼쪽 사이드바에서 **Agent 세션** 메뉴가 선택된 관리자 화면이다.
 
-| 와이어프레임 화면 | route | 구현 파일 | 3번 작업 내용 | 연결 API |
-|---|---|---|---|---|
-| Agent/RAG/Tool 근거 상세 | `/admin/agent-sessions/:id` | `apps/web/src/features/admin/pages/AgentSessionAdminPage.tsx` | Agent 상태 전이, 실행 목적, summary, Tool 호출 목록, RAG 근거 목록을 실제 API 데이터로 표시 | `GET /api/admin/agent-sessions/{id}` |
-| Tool Invocation 상세 | `/admin/tool-invocations/:id` | `apps/web/src/features/admin/pages/ToolInvocationAdminPage.tsx` | Tool 이름, status, confidence, latency, requestPayload, resultPayload, summary를 표시 | `GET /api/admin/tool-invocations/{id}` |
-| RAG Evidence 상세 | `/admin/rag-evidence/:id` | `apps/web/src/features/admin/pages/RagEvidenceAdminPage.tsx` | sourceId, score, summary, chunkText, metadata, agentSessionId를 표시 | `GET /api/admin/rag-evidence/{id}` |
+| 와이어프레임 위치 | 화면에서 보이는 영역 | route | 구현 파일 | 3번 작업 내용 | 연결 API |
+|---|---|---|---|---|---|
+| 3행 4번째 관리자 Agent 세션 상세 화면 | 왼쪽 큰 패널 `Agent 실행 Trace` | `/admin/agent-sessions/:id` | `apps/web/src/features/admin/pages/AgentSessionAdminPage.tsx` | Agent 실행 단계, 단계별 상태, 비용, 결과를 실제 API 데이터로 표시 | `GET /api/admin/agent-sessions/{id}` |
+| 3행 4번째 관리자 Agent 세션 상세 화면 | 오른쪽 위 패널 `RAG Evidence` | `/admin/agent-sessions/:id` 안의 근거 목록 또는 `/admin/rag-evidence/:id` 상세 | `apps/web/src/features/admin/pages/RagEvidenceAdminPage.tsx` | source_id, summary, confidence/score, chunkText, metadata를 표시 | `GET /api/admin/rag-evidence/{id}` |
+| 3행 4번째 관리자 Agent 세션 상세 화면 | 오른쪽 아래 검은 코드 박스 `Tool 응답 JSON` | `/admin/agent-sessions/:id` 안의 Tool 결과 또는 `/admin/tool-invocations/:id` 상세 | `apps/web/src/features/admin/pages/ToolInvocationAdminPage.tsx` | Tool 이름, status, confidence, requestPayload, resultPayload, latency를 표시 | `GET /api/admin/tool-invocations/{id}` |
+| 3행 4번째 관리자 Agent 세션 상세 화면 | 왼쪽 사이드바 `Tool 이력`, `RAG 근거` 메뉴 | `/admin/tool-invocations/:id`, `/admin/rag-evidence/:id` | 위 상세 page 파일 | 와이어프레임의 상세 패널을 별도 drill-down 화면으로 구현 | 각 admin 상세 API |
+
+현재 와이어프레임 이미지에는 `Tool Invocation 상세`과 `RAG Evidence 상세`가 완전히 독립된 큰 프레임으로 따로 그려진 것이 아니라, **3행 4번째 `/admin/agent-sessions/:id` 화면의 오른쪽 패널과 drill-down 메뉴로 표현되어 있다.** 따라서 구현 우선순위도 독립 화면부터 새로 꾸미는 것이 아니라, 먼저 `Agent 실행 Trace`, `RAG Evidence`, `Tool 응답 JSON` 세 패널이 실제 API 데이터로 채워지게 만드는 것이다.
 
 3번이 직접 만들지는 않지만 협업해야 하는 와이어프레임 지점은 아래와 같다.
 
-| 협업 화면 | 주 담당 | 3번이 제공할 것 |
-|---|---|---|
-| AI 견적 입력 / 추가 질문 | 1번 | Agent session 생성과 실행 API 계약, 진행 상태 조회 방식 |
-| 추천 Build 결과 | 1번 | `evidenceIds`, `toolInvocationIds`, RAG 근거 상세 링크/조회 API |
-| 부품 변경 비교 | 1번/2번 | 변경 전후 설명에 사용할 RAG/Tool trace 저장 방식 |
-| AS 접수 / 로그 업로드 | 4번 | `asTicketId` 기반 `AS_ANALYZE` Agent session 생성 방식 |
-| AS 티켓 상세 / 관리자 AS 티켓 | 4번 | 원인 후보와 업그레이드 후보가 참조할 `rag_evidence` id 제공 방식 |
+| 와이어프레임 위치 | 협업 화면 | 주 담당 | 3번이 제공할 것 |
+|---|---|---|---|
+| 1행 2번째 `/requirements/new` | AI 견적 입력 / 추가 질문 | 1번 | Agent session 생성과 실행 API 계약, 진행 상태 조회 방식 |
+| 1행 3번째 `/builds/:id` | 추천 Build 결과의 `RAG evidence 4개`, `Tool 검증 완료` 배지와 우측 `견적 합계 / 검증` 패널 | 1번 | `evidenceIds`, `toolInvocationIds`, RAG 근거 상세 링크/조회 API |
+| 2행 1번째 `/builds/:id/compare` | 부품 변경 제안의 오른쪽 `근거/경고 패널` | 1번/2번 | 변경 전후 설명에 사용할 RAG/Tool trace 저장 방식 |
+| 2행 3번째 `/support/new` | `PC Agent 로그 미리보기`, `도움말/상태` | 4번 | `asTicketId` 기반 `AS_ANALYZE` Agent session 생성 방식 |
+| 2행 4번째 `/support/tickets/:id` | 오른쪽 `로그 요약 / 추천 조치` 패널 | 4번 | 원인 후보와 업그레이드 후보가 참조할 `rag_evidence` id 제공 방식 |
+| 3행 3번째 `/admin` | `최근 Agent 세션`, `관리자 할 일` 표 | 5번 | Agent session 상태와 RAG/Tool 요약 데이터 |
 
 이번 2주 안에 3번 화면은 완성형 UI가 아니라, 와이어프레임에서 약속한 정보 구조가 실제 API 데이터로 채워지는 수준을 목표로 한다. 색상, 여백, 세부 시각 개선은 AdminShell과 공통 컴포넌트 기준을 따른다.
 
